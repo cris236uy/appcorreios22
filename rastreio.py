@@ -1,9 +1,7 @@
 import streamlit as st
 import pandas as pd
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-import time
+from bs4 import BeautifulSoup
+import requests
 from io import BytesIO
 
 # --- Configuração da página
@@ -13,36 +11,24 @@ st.title("🔍 Rastreador de Encomendas (Muambator)")
 # --- Carrega a planilha local
 df = pd.read_excel("pasta definitiva - Copia.xlsx")
 
-# --- Função para rastrear código via Selenium
+# --- Função para rastrear código via BeautifulSoup
 def rastrear_objeto(codigo):
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--window-size=1920x1080")
-
-    driver = webdriver.Chrome(options=chrome_options)
+    url = f"https://www.muambator.com.br/p/{codigo}/"
     status = "Não encontrado"
 
     try:
-        driver.get("https://www.muambator.com.br/")
-        time.sleep(3)
-
-        campo = driver.find_element(By.ID, "pesquisaPub")
-        campo.clear()
-        campo.send_keys(codigo)
-        time.sleep(1)
-
-        botao = driver.find_element(By.ID, "submitPesqPub")
-        driver.execute_script("arguments[0].click();", botao)
-        time.sleep(4)
-
-        status = driver.find_element(By.CLASS_NAME, "situacao-header").text
-
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            status_element = soup.find(class_="situacao-header")
+            if status_element:
+                status = status_element.text.strip()
+            else:
+                status = "Status não encontrado"
+        else:
+            status = f"Erro HTTP: {response.status_code}"
     except Exception as e:
         status = f"Erro: {e}"
-
-    finally:
-        driver.quit()
 
     return status
 
