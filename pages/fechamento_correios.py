@@ -5,9 +5,10 @@ import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
 
+# Configuração da página
 st.set_page_config(
     layout="wide",
-    page_title="animes mais populares"
+    page_title="Animes Mais Populares"
 )
 
 # Usuários e senhas válidos
@@ -17,6 +18,7 @@ usuarios_validos = {
     "user2": "senha2"
 }
 
+# Função de login
 def tela_login():
     st.title("Login")
     usuario = st.text_input("Usuário")
@@ -25,24 +27,24 @@ def tela_login():
         if usuario in usuarios_validos and senha == usuarios_validos[usuario]:
             st.session_state["logado"] = True
             st.session_state["usuario"] = usuario
-            st.rerun()  # <- forçar recarregamento
+            st.rerun()  # Força recarregamento
         else:
             st.error("Usuário ou senha incorretos")
 
-# Inicializa estado
+# Inicializa o estado da sessão
 if "logado" not in st.session_state:
     st.session_state["logado"] = False
 
-# Se não estiver logado, exibe a tela de login
+# Exibe a tela de login se o usuário não estiver logado
 if not st.session_state["logado"]:
     tela_login()
 else:
-    # 🔐 AQUI começa o conteúdo protegido
-    st.title(f"Página Protegida - Bem vindo {st.session_state['usuario']}!")
+    # 🔐 Conteúdo protegido
+    st.title(f"Página Protegida - Bem-vindo {st.session_state['usuario']}!")
     st.write("Você está logado! Conteúdo secreto aqui.")
 
     # ✅ Lê o Excel
-   df = pd.read_excel("pasta definitiva - Copia.xlsx")
+    df = pd.read_excel("pasta definitiva - Copia.xlsx")
 
     # Editor de dados
     edited_df = st.data_editor(df, num_rows="dynamic")
@@ -61,26 +63,27 @@ else:
         format="MM.DD.YYYY",
     )
 
+    # Verifica se o usuário selecionou duas datas
     if isinstance(d, tuple) and len(d) == 2:
         start_date, end_date = d
 
-        # 🔍 Filtrando o DataFrame pelo intervalo de datas
+        # 🔍 Filtra o DataFrame pelo intervalo de datas
         filtro = df[(df["DATA"].dt.date >= start_date) & (df["DATA"].dt.date <= end_date)]
 
-        # ➕ Somando o total geral
+        # ➕ Soma total do valor no período
         total_valor = filtro["VALOR"].sum()
 
         # 📊 Soma por centro de custo
         soma_por_centro = filtro.groupby("CENTRO DE CUSTO")["VALOR"].sum().reset_index()
 
-        # ✅ Exibir o DataFrame filtrado
+        # ✅ Exibe os dados filtrados
         st.subheader("Dados Filtrados")
         st.dataframe(filtro)
 
-        # 💬 Mostrar total geral
+        # 💬 Exibe o total geral
         st.success(f"Total do VALOR no intervalo selecionado: R$ {total_valor:,.2f}")
 
-        # 📋 Mostrar total por centro de custo
+        # 📋 Exibe o total por centro de custo
         st.subheader("Total por Centro de Custo")
         st.dataframe(soma_por_centro)
     else:
