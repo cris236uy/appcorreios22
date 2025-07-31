@@ -3,5 +3,11 @@ selenium
 pandas
 openpyxl
 plotly
+requests
+beautifulsoup4
+selenium
+geopy
+
+
 
 
