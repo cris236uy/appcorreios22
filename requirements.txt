@@ -9,4 +9,4 @@ selenium
 geopy
 folium
 streamlit-folium
-
+xlsxwriter 
