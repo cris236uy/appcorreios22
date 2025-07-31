@@ -42,7 +42,7 @@ else:
     st.write("Você está logado! Conteúdo secreto aqui.")
 
     # ✅ Lê o Excel
-    df = pd.read_excel("C:/Users/Usuário/Downloads/codigos123/pages/pasta definitiva - Copia.xlsx")
+   df = pd.read_excel("pasta definitiva - Copia.xlsx")
 
     # Editor de dados
     edited_df = st.data_editor(df, num_rows="dynamic")
