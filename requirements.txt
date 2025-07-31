@@ -8,7 +8,5 @@ beautifulsoup4
 selenium
 geopy
 folium
-
-
-
+streamlit-folium
 
