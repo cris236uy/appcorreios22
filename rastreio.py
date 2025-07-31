@@ -1,36 +1,28 @@
 import streamlit as st
 import pandas as pd
-from bs4 import BeautifulSoup
 import requests
 from io import BytesIO
 
 # --- Configuração da página
 st.set_page_config(page_title="Rastreador de Encomendas", layout="wide")
-st.title("🔍 Rastreador de Encomendas (Muambator)")
+st.title("🔍 Rastreador de Encomendas (Linketrack)")
 
 # --- Carrega a planilha local
 df = pd.read_excel("pasta definitiva - Copia.xlsx")
 
-# --- Função para rastrear código via BeautifulSoup
+# --- Função para rastrear código via API do Linketrack
 def rastrear_objeto(codigo):
-    url = f"https://www.muambator.com.br/p/{codigo}/"
-    status = "Não encontrado"
-
     try:
+        url = f"https://api.linketrack.com/track/json?user=SEU_USUARIO&token=SEU_TOKEN&codigo={codigo}"
         response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            status_element = soup.find(class_="situacao-header")
-            if status_element:
-                status = status_element.text.strip()
-            else:
-                status = "Status não encontrado"
-        else:
-            status = f"Erro HTTP: {response.status_code}"
+        if response.status_code != 200:
+            return f"Erro HTTP: {response.status_code}"
+        data = response.json()
+        if "eventos" in data and data["eventos"]:
+            return data["eventos"][0].get("status", "Status não disponível")
+        return "Nenhum evento encontrado"
     except Exception as e:
-        status = f"Erro: {e}"
-
-    return status
+        return f"Erro: {e}"
 
 # --- Entrada de códigos pelo usuário
 lista_codigos = st.text_area("Cole os códigos de rastreio (um por linha):")
@@ -81,3 +73,4 @@ if st.button("🚚 Rastrear Códigos"):
             file_name="rastreio.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
