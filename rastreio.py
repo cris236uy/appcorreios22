@@ -57,7 +57,7 @@ cepfilter2 = st.sidebar.selectbox("Filtro por CEP", cepfilter)
 filtrada = df[df["CEP"] == cepfilter2] 
 
 # --- Abas com páginas
-tab1, tab2, tab3 = st.tabs(["📦 Cruz Alta", "🏢 Vertente", "📨 Tanabi"])
+tab1 = st.tabs(["📦 Cruz Alta"])
 
 with tab1:
     st.header("Unidade Cruz Alta")
