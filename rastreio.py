@@ -2,25 +2,18 @@ import streamlit as st
 import pandas as pd
 import requests
 from io import BytesIO
-from dotenv import load_dotenv
-import os
 
-# Carrega variáveis do .env
-load_dotenv()
-
-LINKETRACK_USER = os.getenv("LINKETRACK_USER")
-LINKETRACK_TOKEN = os.getenv("LINKETRACK_TOKEN")
-
-# Configuração da página
+# --- Configuração da página
 st.set_page_config(page_title="Rastreador de Encomendas", layout="wide")
 st.title("🔍 Rastreador de Encomendas (Linketrack)")
 
-# Carrega planilha local
+# --- Carrega a planilha local
 df = pd.read_excel("pasta definitiva - Copia.xlsx")
 
+# --- Função para rastrear código via API do Linketrack
 def rastrear_objeto(codigo):
     try:
-        url = f"https://api.linketrack.com/track/json?user={LINKETRACK_USER}&token={LINKETRACK_TOKEN}&codigo={codigo}"
+        url = f"https://api.linketrack.com/track/json?user=SEU_USUARIO&token=SEU_TOKEN&codigo={codigo}"
         response = requests.get(url, timeout=10)
         if response.status_code != 200:
             return f"Erro HTTP: {response.status_code}"
@@ -31,22 +24,22 @@ def rastrear_objeto(codigo):
     except Exception as e:
         return f"Erro: {e}"
 
-# Entrada de códigos pelo usuário
+# --- Entrada de códigos pelo usuário
 lista_codigos = st.text_area("Cole os códigos de rastreio (um por linha):")
 
-# Filtro de CEP na barra lateral
+# --- Filtro de CEP na barra lateral
 cepfilter = df["CEP"].unique()
 cepfilter2 = st.sidebar.selectbox("Filtro por CEP", cepfilter)
 filtrada = df[df["CEP"] == cepfilter2]
 
-# Página principal
+# --- Página principal
 st.header("📦 Unidade Cruz Alta")
 edited_df = st.data_editor(
     filtrada[["CEP", "DATA", "CENTRO DE CUSTO", "CÓDIGO DE RASTREIO"]],
     num_rows="dynamic"
 )
 
-# Botão para rastrear
+# --- Botão para rastrear
 if st.button("🚚 Rastrear Códigos"):
     codigos = [c.strip() for c in lista_codigos.strip().split("\n") if c.strip()]
 
@@ -80,4 +73,3 @@ if st.button("🚚 Rastrear Códigos"):
             file_name="rastreio.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-
