@@ -10,5 +10,5 @@ geopy
 folium
 streamlit-folium
 xlsxwriter 
-beautifulsoup4 
+python-dotenv
 
