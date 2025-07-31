@@ -11,7 +11,8 @@ st.set_page_config(page_title="Rastreador de Encomendas", layout="wide")
 st.title("🔍 Rastreador de Encomendas (Muambator)")
 
 # --- Carrega a planilha local
-df = pd.read_excel("C:/Users/Usuário/Downloads/codigos123/pages/pasta definitiva - Copia.xlsx")
+df = pd.read_excel("appcorreios22/pasta_definitiva.xlsx")
+
 
 # --- Função para rastrear código via Selenium
 def rastrear_objeto(codigo):
