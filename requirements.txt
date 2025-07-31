@@ -10,3 +10,5 @@ geopy
 folium
 streamlit-folium
 xlsxwriter 
+beautifulsoup4 
+
