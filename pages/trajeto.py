@@ -100,3 +100,4 @@ if st.button("Consultar"):
             st.error("Um dos CEPs é inválido ou não encontrado.")
     else:
         st.warning("Informe ambos os CEPs.")
+           
