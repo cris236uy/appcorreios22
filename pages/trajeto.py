@@ -1,110 +1,124 @@
 import streamlit as st
-import requests
 import pandas as pd
-from geopy.geocoders import Nominatim
+import requests
+import folium
+from folium import Marker
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
 from geopy.distance import geodesic
+from io import BytesIO
+from streamlit_folium import st_folium
 
-st.set_page_config(page_title="Consulta de CEPs", layout="wide")
-st.title("📍 Consulta de CEPs – Remetente e Destinatário")
-
-# Função para consultar dados do CEP via API ViaCEP
-def consultar_cep(cep):
-    url = f"https://viacep.com.br/ws/{cep}/json/"
-    resposta = requests.get(url)
-    if resposta.status_code == 200:
-        dados = resposta.json()
-        if not dados.get("erro"):
-            return dados
-    return None
-
-# Função para obter coordenadas via endereço completo
-def coordenadas_por_cep(dados_cep):
-    localizador = Nominatim(user_agent="consulta_cep_app")
+# Função para buscar informações do CEP via API gratuita ViaCEP
+def buscar_info_cep(cep):
     try:
-        logradouro = dados_cep.get("logradouro", "")
-        bairro = dados_cep.get("bairro", "")
-        cidade = dados_cep.get("localidade", "")
-        estado = dados_cep.get("uf", "")
-        
-        endereco = f"{logradouro}, {bairro}, {cidade} - {estado}, Brasil"
-        local = localizador.geocode(endereco)
-        if local:
-            return (local.latitude, local.longitude)
-    except:
-        pass
-    return None
-
-# Interface
-with st.form("form_ceps"):
-    cep_rem = st.text_input("🔹 CEP do Remetente", placeholder="Ex: 01001-000")
-    cep_dest = st.text_input("🔸 CEP do Destinatário", placeholder="Ex: 01310-100")
-    submitted = st.form_submit_button("Consultar")
-
-if submitted:
-    if not cep_rem or not cep_dest:
-        st.error("Por favor, preencha os dois CEPs.")
-    else:
-        dados_rem = consultar_cep(cep_rem)
-        dados_dest = consultar_cep(cep_dest)
-
-        if not dados_rem:
-            st.error("❌ CEP do remetente inválido ou não encontrado.")
-        elif not dados_dest:
-            st.error("❌ CEP do destinatário inválido ou não encontrado.")
+        response = requests.get(f"https://viacep.com.br/ws/{cep}/json/")
+        if response.status_code == 200:
+            return response.json()
         else:
-            # Mostra os dados
-            col1, col2 = st.columns(2)
-            with col1:
-                st.subheader("📦 Remetente")
-                st.json(dados_rem)
-            with col2:
-                st.subheader("📬 Destinatário")
-                st.json(dados_dest)
+            return None
+    except:
+        return None
 
-            # Coordenadas
-            coord_rem = coordenadas_por_cep(dados_rem)
-            coord_dest = coordenadas_por_cep(dados_dest)
+# Função para rastrear código no Muambator
+def rastrear_objeto(codigo):
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    driver = webdriver.Chrome(options=chrome_options)
 
-            if coord_rem and coord_dest:
-                distancia_km = geodesic(coord_rem, coord_dest).km
-                st.success(f"🛣️ Distância estimada: {distancia_km:.2f} km")
-            else:
-                st.warning("⚠️ Não foi possível calcular a distância entre os CEPs.")
+    try:
+        driver.get("https://www.muambator.com.br/")
+        driver.implicitly_wait(5)
+        campo = driver.find_element(By.ID, "pesquisaPub")
+        campo.clear()
+        campo.send_keys(codigo)
+        botao = driver.find_element(By.ID, "submitPesqPub")
+        driver.execute_script("arguments[0].click();", botao)
+        driver.implicitly_wait(5)
+        status = driver.find_element(By.CLASS_NAME, "situacao-header").text
+    except Exception:
+        status = "Erro ao rastrear"
+    finally:
+        driver.quit()
+    return status
 
-            # Verificação da área de entrega
-            def verificar_area_urbana(dados):
-                localidade = dados.get("localidade", "").lower()
-                if any(palavra in localidade for palavra in ["zona rural", "rural", "interior", "colônia"]):
-                    return "❌ Área não urbana (possível restrição de entrega)"
-                return "✅ Área urbana (provavelmente recebe entregas)"
+# Título da aplicação
+st.title("📦 Rastreador & Analisador de Encomendas")
 
-            st.markdown("### 📫 Verificação de Área de Entrega")
-            st.write("Remetente:", verificar_area_urbana(dados_rem))
-            st.write("Destinatário:", verificar_area_urbana(dados_dest))
+# Entrada de CEPs
+col1, col2 = st.columns(2)
+with col1:
+    cep_remetente = st.text_input("CEP do Remetente", placeholder="Ex: 01001-000")
+with col2:
+    cep_destinatario = st.text_input("CEP do Destinatário", placeholder="Ex: 01310-000")
 
-            # Dados para exportação
-            df_resultado = pd.DataFrame([
-                {
-                    "Tipo": "Remetente",
-                    **dados_rem,
-                    "Latitude": coord_rem[0] if coord_rem else "",
-                    "Longitude": coord_rem[1] if coord_rem else ""
-                },
-                {
-                    "Tipo": "Destinatário",
-                    **dados_dest,
-                    "Latitude": coord_dest[0] if coord_dest else "",
-                    "Longitude": coord_dest[1] if coord_dest else ""
-                }
-            ])
+# Consulta dos dados dos CEPs
+if cep_remetente and cep_destinatario:
+    info_rem = buscar_info_cep(cep_remetente)
+    info_dest = buscar_info_cep(cep_destinatario)
 
-            st.markdown("### 📁 Exportar Dados")
-            csv = df_resultado.to_csv(index=False).encode("utf-8")
-            excel = df_resultado.to_excel(index=False, engine='openpyxl')
+    if not info_rem or "erro" in info_rem:
+        st.error("❌ CEP do remetente inválido ou não localizado.")
+    elif not info_dest or "erro" in info_dest:
+        st.error("❌ CEP do destinatário inválido ou não localizado.")
+    else:
+        st.success("✅ Endereços localizados com sucesso.")
+        col3, col4 = st.columns(2)
+        with col3:
+            st.subheader("📍 Remetente")
+            st.write(info_rem)
+        with col4:
+            st.subheader("📍 Destinatário")
+            st.write(info_dest)
 
-            st.download_button("⬇️ Baixar CSV", csv, file_name="ceps_consultados.csv", mime="text/csv")
+        # Cálculo da distância
+        try:
+            coord_rem = (float(info_rem['latitude']), float(info_rem['longitude']))
+            coord_dest = (float(info_dest['latitude']), float(info_dest['longitude']))
+        except:
+            # Se não vier latitude/longitude do ViaCEP, usar geopy para buscar
+            from geopy.geocoders import Nominatim
+            geolocator = Nominatim(user_agent="cep_app")
+            location_rem = geolocator.geocode(info_rem['logradouro'] + ", " + info_rem['localidade'])
+            location_dest = geolocator.geocode(info_dest['logradouro'] + ", " + info_dest['localidade'])
+            if location_rem and location_dest:
+                coord_rem = (location_rem.latitude, location_rem.longitude)
+                coord_dest = (location_dest.latitude, location_dest.longitude)
 
-            from io import BytesIO
-            excel_buffer = BytesIO()
-            df_resultado.to_excel(excel_buffer, index=False, engine='openpyxl')
-            st.download_button("⬇️ Baixar Excel", data=excel_buffer.getvalue(), file_name="ceps_consultados.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        distancia_km = geodesic(coord_rem, coord_dest).km
+        st.metric("🚛 Distância entre os CEPs", f"{distancia_km:.2f} km")
+
+        # Mapa
+        mapa = folium.Map(location=coord_rem, zoom_start=6)
+        Marker(coord_rem, tooltip="Remetente", icon=folium.Icon(color="blue")).add_to(mapa)
+        Marker(coord_dest, tooltip="Destinatário", icon=folium.Icon(color="red")).add_to(mapa)
+        folium.PolyLine(locations=[coord_rem, coord_dest], color='green').add_to(mapa)
+        st_folium(mapa, width=700)
+
+# Rastreio de múltiplos códigos
+st.subheader("📦 Rastreio de Códigos")
+codigos_raw = st.text_area("Cole os códigos de rastreio (um por linha):")
+
+if st.button("🔍 Rastrear Todos"):
+    codigos = [c.strip() for c in codigos_raw.strip().split("\n") if c.strip()]
+    resultados = []
+
+    with st.spinner("Rastreando..."):
+        for i, cod in enumerate(codigos):
+            status = rastrear_objeto(cod)
+            resultados.append({"Código": cod, "Status": status})
+            st.write(f"{i+1}/{len(codigos)} - {cod}: {status}")
+
+    df_resultados = pd.DataFrame(resultados)
+    st.success("✅ Rastreamento finalizado!")
+    st.dataframe(df_resultados)
+
+    # Download CSV
+    st.download_button("⬇ Baixar em CSV", df_resultados.to_csv(index=False).encode("utf-8"), "rastreio.csv", "text/csv")
+
+    # Download Excel
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df_resultados.to_excel(writer, index=False, sheet_name="Rastreamento")
+    st.download_button("⬇ Baixar em Excel", output.getvalue(), "rastreio.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
