@@ -1,157 +1,110 @@
 import streamlit as st
-import pandas as pd
 import requests
-from geopy.distance import geodesic
+import pandas as pd
 from geopy.geocoders import Nominatim
-from io import BytesIO
-import folium
-from streamlit_folium import st_folium
+from geopy.distance import geodesic
 
-# ----------------------- FUNÇÕES AUXILIARES -----------------------
+st.set_page_config(page_title="Consulta de CEPs", layout="wide")
+st.title("📍 Consulta de CEPs – Remetente e Destinatário")
 
+# Função para consultar dados do CEP via API ViaCEP
 def consultar_cep(cep):
-    try:
-        r = requests.get(f"https://viacep.com.br/ws/{cep}/json/")
-        dados = r.json()
-        if "erro" in dados:
-            return {"cep": cep, "erro": "CEP não encontrado"}
-        return dados
-    except:
-        return {"cep": cep, "erro": "Erro na API"}
+    url = f"https://viacep.com.br/ws/{cep}/json/"
+    resposta = requests.get(url)
+    if resposta.status_code == 200:
+        dados = resposta.json()
+        if not dados.get("erro"):
+            return dados
+    return None
 
-def coordenadas_por_cep(cep):
+# Função para obter coordenadas via endereço completo
+def coordenadas_por_cep(dados_cep):
     localizador = Nominatim(user_agent="consulta_cep_app")
     try:
-        local = localizador.geocode(cep + ", Brasil")
+        logradouro = dados_cep.get("logradouro", "")
+        bairro = dados_cep.get("bairro", "")
+        cidade = dados_cep.get("localidade", "")
+        estado = dados_cep.get("uf", "")
+        
+        endereco = f"{logradouro}, {bairro}, {cidade} - {estado}, Brasil"
+        local = localizador.geocode(endereco)
         if local:
             return (local.latitude, local.longitude)
     except:
         pass
     return None
 
-def verificar_area_entrega(dados_cep):
-    if "logradouro" in dados_cep:
-        log = dados_cep["logradouro"].lower()
-        if any(palavra in log for palavra in ["sítio", "chácara", "fazenda", "zona rural"]):
-            return "❌ Área Rural - Pode não receber entregas"
-    return "✅ Área urbana"
+# Interface
+with st.form("form_ceps"):
+    cep_rem = st.text_input("🔹 CEP do Remetente", placeholder="Ex: 01001-000")
+    cep_dest = st.text_input("🔸 CEP do Destinatário", placeholder="Ex: 01310-100")
+    submitted = st.form_submit_button("Consultar")
 
-def to_excel(df):
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, index=False, sheet_name='CEPs')
-    return output.getvalue()
-
-def calcular_frete(cep_origem, cep_destino):
-    url = "http://ws.correios.com.br/calculador/CalcPrecoPrazo.aspx"
-    params = {
-        "nCdEmpresa": "",
-        "sDsSenha": "",
-        "nCdServico": "04014",  # SEDEX. Use 04510 para PAC
-        "sCepOrigem": cep_origem.replace("-", ""),
-        "sCepDestino": cep_destino.replace("-", ""),
-        "nVlPeso": "1",
-        "nCdFormato": "1",
-        "nVlComprimento": "20",
-        "nVlAltura": "10",
-        "nVlLargura": "15",
-        "nVlDiametro": "0",
-        "sCdMaoPropria": "N",
-        "nVlValorDeclarado": "0",
-        "sCdAvisoRecebimento": "N",
-        "StrRetorno": "xml"
-    }
-    try:
-        r = requests.get(url, params=params)
-        if r.status_code == 200:
-            from xml.etree import ElementTree as ET
-            tree = ET.fromstring(r.content)
-            valor = tree.find(".//Valor").text
-            prazo = tree.find(".//PrazoEntrega").text
-            return f"R$ {valor} (Prazo: {prazo} dia(s))"
-    except:
-        pass
-    return "Erro ao calcular"
-
-# ------------------------- STREAMLIT APP -------------------------
-
-st.set_page_config(page_title="🚚 Cálculo de Entrega por CEP", layout="wide")
-st.title("🚚 Consulta de Entrega por CEP")
-
-# Inicializar session_state
-if "consulta_feita" not in st.session_state:
-    st.session_state.consulta_feita = False
-    st.session_state.df = None
-    st.session_state.coord_rem = None
-    st.session_state.coord_dest = None
-
-# Entradas
-remetente = st.text_input("CEP do Remetente", placeholder="Ex: 01001-000")
-destinatario = st.text_input("CEP do Destinatário", placeholder="Ex: 87083-320")
-
-# Botão de consulta
-if st.button("Consultar"):
-    if not remetente or not destinatario:
-        st.warning("Informe os dois CEPs.")
+if submitted:
+    if not cep_rem or not cep_dest:
+        st.error("Por favor, preencha os dois CEPs.")
     else:
-        dados_rem = consultar_cep(remetente)
-        dados_dest = consultar_cep(destinatario)
+        dados_rem = consultar_cep(cep_rem)
+        dados_dest = consultar_cep(cep_dest)
 
-        if "erro" in dados_rem or "erro" in dados_dest:
-            st.error("Um dos CEPs é inválido.")
+        if not dados_rem:
+            st.error("❌ CEP do remetente inválido ou não encontrado.")
+        elif not dados_dest:
+            st.error("❌ CEP do destinatário inválido ou não encontrado.")
         else:
-            coord_rem = coordenadas_por_cep(remetente)
-            coord_dest = coordenadas_por_cep(destinatario)
+            # Mostra os dados
+            col1, col2 = st.columns(2)
+            with col1:
+                st.subheader("📦 Remetente")
+                st.json(dados_rem)
+            with col2:
+                st.subheader("📬 Destinatário")
+                st.json(dados_dest)
 
-            if not coord_rem or not coord_dest:
-                st.error("Não foi possível localizar coordenadas para um dos CEPs.")
+            # Coordenadas
+            coord_rem = coordenadas_por_cep(dados_rem)
+            coord_dest = coordenadas_por_cep(dados_dest)
+
+            if coord_rem and coord_dest:
+                distancia_km = geodesic(coord_rem, coord_dest).km
+                st.success(f"🛣️ Distância estimada: {distancia_km:.2f} km")
             else:
-                km = round(geodesic(coord_rem, coord_dest).km, 2)
-                entrega = verificar_area_entrega(dados_dest)
-                frete_info = calcular_frete(remetente, destinatario)
+                st.warning("⚠️ Não foi possível calcular a distância entre os CEPs.")
 
-                resultado = {
-                    "CEP Remetente": remetente,
-                    "Logradouro Remetente": dados_rem.get("logradouro", ""),
-                    "Cidade Remetente": dados_rem.get("localidade", ""),
-                    "UF Remetente": dados_rem.get("uf", ""),
-                    "CEP Destinatário": destinatario,
-                    "Logradouro Destinatário": dados_dest.get("logradouro", ""),
-                    "Cidade Destinatário": dados_dest.get("localidade", ""),
-                    "UF Destinatário": dados_dest.get("uf", ""),
-                    "Distância (KM)": km,
-                    "Entrega Possível?": entrega,
-                    "Frete (SEDEX)": frete_info
+            # Verificação da área de entrega
+            def verificar_area_urbana(dados):
+                localidade = dados.get("localidade", "").lower()
+                if any(palavra in localidade for palavra in ["zona rural", "rural", "interior", "colônia"]):
+                    return "❌ Área não urbana (possível restrição de entrega)"
+                return "✅ Área urbana (provavelmente recebe entregas)"
+
+            st.markdown("### 📫 Verificação de Área de Entrega")
+            st.write("Remetente:", verificar_area_urbana(dados_rem))
+            st.write("Destinatário:", verificar_area_urbana(dados_dest))
+
+            # Dados para exportação
+            df_resultado = pd.DataFrame([
+                {
+                    "Tipo": "Remetente",
+                    **dados_rem,
+                    "Latitude": coord_rem[0] if coord_rem else "",
+                    "Longitude": coord_rem[1] if coord_rem else ""
+                },
+                {
+                    "Tipo": "Destinatário",
+                    **dados_dest,
+                    "Latitude": coord_dest[0] if coord_dest else "",
+                    "Longitude": coord_dest[1] if coord_dest else ""
                 }
+            ])
 
-                st.session_state.df = pd.DataFrame([resultado])
-                st.session_state.coord_rem = coord_rem
-                st.session_state.coord_dest = coord_dest
-                st.session_state.consulta_feita = True
+            st.markdown("### 📁 Exportar Dados")
+            csv = df_resultado.to_csv(index=False).encode("utf-8")
+            excel = df_resultado.to_excel(index=False, engine='openpyxl')
 
-# Exibir resultados
-if st.session_state.consulta_feita:
-    st.success("✅ Consulta finalizada")
-    st.dataframe(st.session_state.df)
+            st.download_button("⬇️ Baixar CSV", csv, file_name="ceps_consultados.csv", mime="text/csv")
 
-    # Botões de download
-    st.download_button(
-        "📥 Baixar CSV",
-        data=st.session_state.df.to_csv(index=False).encode("utf-8"),
-        file_name="consulta_ceps.csv",
-        mime="text/csv"
-    )
-    st.download_button(
-        "📥 Baixar Excel",
-        data=to_excel(st.session_state.df),
-        file_name="consulta_ceps.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-    # Exibir mapa
-    st.subheader("🗺️ Mapa da rota entre os CEPs")
-    m = folium.Map(location=st.session_state.coord_rem, zoom_start=6)
-    folium.Marker(st.session_state.coord_rem, tooltip="Remetente", icon=folium.Icon(color="green")).add_to(m)
-    folium.Marker(st.session_state.coord_dest, tooltip="Destinatário", icon=folium.Icon(color="blue")).add_to(m)
-    folium.PolyLine([st.session_state.coord_rem, st.session_state.coord_dest], color="red", weight=2.5).add_to(m)
-    st_folium(m, width=800, height=500)
+            from io import BytesIO
+            excel_buffer = BytesIO()
+            df_resultado.to_excel(excel_buffer, index=False, engine='openpyxl')
+            st.download_button("⬇️ Baixar Excel", data=excel_buffer.getvalue(), file_name="ceps_consultados.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
