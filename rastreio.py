@@ -1,50 +1,44 @@
 import streamlit as st
 import pandas as pd
 
-# Título do app
-st.title("📦 Consulta de CEPs - Dashboard de Encomendas")
+# Configurações da página
+st.set_page_config(page_title="📦 Filtro de Encomendas", layout="wide")
+st.title("📦 Filtro de Encomendas por CEP, Data e Código")
 
-# Carrega os dados
-df = pd.read_excel("C:/Users/Usuário/Downloads/codigos123/pages/pasta definitiva - Copia.xlsx")
+# Carrega o DataFrame
+caminho_arquivo = "C:/Users/Usuário/Downloads/codigos123/pages/pasta definitiva - Copia.xlsx"
+df = pd.read_excel(caminho_arquivo)
 
-# Filtros com selectbox
-cep_list = df["CEP"].dropna().unique()
-data_list = df["DATA"].dropna().unique()
-centro_list = df["CENTRO DE CUSTO"].dropna().unique()
-
+# Filtros interativos
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    selected_cep = st.selectbox("🔍 Filtrar por CEP", ["Todos"] + list(cep_list))
+    cep_filtro = st.selectbox("Filtrar por CEP:", options=["Todos"] + sorted(df["CEP"].dropna().unique().tolist()))
+
 with col2:
-    selected_data = st.selectbox("📅 Filtrar por Data", ["Todos"] + list(data_list))
+    data_filtro = st.selectbox("Filtrar por Data:", options=["Todos"] + sorted(df["DATA"].astype(str).dropna().unique().tolist()))
+
 with col3:
-    selected_centro = st.selectbox("🏢 Filtrar por Centro de Custo", ["Todos"] + list(centro_list))
+    centro_filtro = st.selectbox("Filtrar por Centro de Custo:", options=["Todos"] + sorted(df["CENTRO DE CUSTO"].dropna().unique().tolist()))
 
-# Campo de pesquisa livre
-search_text = st.text_input("🔎 Buscar por código de rastreio ou qualquer texto:")
+# Campo de busca por código
+codigo_busca = st.text_input("🔍 Buscar por Código de Rastreio:")
 
-# Filtragem dinâmica
-filtro_df = df.copy()
+# Aplica os filtros
+df_filtrado = df.copy()
 
-if selected_cep != "Todos":
-    filtro_df = filtro_df[filtro_df["CEP"] == selected_cep]
+if cep_filtro != "Todos":
+    df_filtrado = df_filtrado[df_filtrado["CEP"] == cep_filtro]
 
-if selected_data != "Todos":
-    filtro_df = filtro_df[filtro_df["DATA"] == selected_data]
+if data_filtro != "Todos":
+    df_filtrado = df_filtrado[df_filtrado["DATA"].astype(str) == data_filtro]
 
-if selected_centro != "Todos":
-    filtro_df = filtro_df[filtro_df["CENTRO DE CUSTO"] == selected_centro]
+if centro_filtro != "Todos":
+    df_filtrado = df_filtrado[df_filtrado["CENTRO DE CUSTO"] == centro_filtro]
 
-if search_text:
-    filtro_df = filtro_df[
-        filtro_df.apply(lambda row: search_text.lower() in str(row).lower(), axis=1)
-    ]
-    st.info(f"🔎 Resultados para: {search_text}")
+if codigo_busca:
+    df_filtrado = df_filtrado[df_filtrado["CÓDIGO DE RASTREIO"].str.contains(codigo_busca, case=False, na=False)]
 
-# Resultado da filtragem
-if filtro_df.empty:
-    st.warning("⚠️ Nenhum resultado encontrado com os filtros aplicados.")
-else:
-    st.success(f"✅ {len(filtro_df)} resultados encontrados.")
-    st.dataframe(filtro_df, use_container_width=True)
+# Exibe os resultados
+st.markdown(f"### Resultados encontrados: {len(df_filtrado)}")
+st.dataframe(df_filtrado, use_container_width=True)
