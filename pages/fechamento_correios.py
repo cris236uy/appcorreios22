@@ -4,6 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
+from io import BytesIO
 
 # Configuração da página
 st.set_page_config(
@@ -94,8 +95,22 @@ else:
             # 📋 Exibe o total por centro de custo
             st.subheader("Total por Centro de Custo")
             st.dataframe(soma_por_centro)
+
+            # 📤 Exportar para Excel
+            output = BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                filtro.to_excel(writer, sheet_name='Filtrados', index=False)
+                soma_por_centro.to_excel(writer, sheet_name='Resumo por Centro', index=False)
+            output.seek(0)
+
+            st.download_button(
+                label="📥 Baixar dados filtrados em Excel",
+                data=output,
+                file_name="dados_filtrados.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
         else:
             st.warning("Selecione um intervalo de duas datas.")
     else:
         st.info("Por favor, faça o upload de um arquivo Excel para começar.")
-    
+                                
