@@ -9,7 +9,7 @@ from io import BytesIO
 # Configuração da página
 st.set_page_config(
     layout="wide",
-    page_title="Animes Mais Populares"
+    page_title="Fechamentos Correios"
 )
 
 # Usuários e senhas válidos
