@@ -66,12 +66,6 @@ if uploaded_file:
             st.data_editor(df_filtrado, use_container_width=True, num_rows="dynamic")
 
 
-    import streamlit as st
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-import time
 
 # Configuração da página
 st.set_page_config(page_title="Automação Kaggle", layout="centered")
