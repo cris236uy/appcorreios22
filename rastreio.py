@@ -76,14 +76,16 @@ modo = st.radio("Escolha o modo de execução do Selenium:", ["Normal (visível)
 
 if st.button("Executar Automação"):
     st.write("🔍 Iniciando automação no Kaggle...")
+try:
+    driver = webdriver.Chrome(service=service, options=chrome_options)
+    driver.get("https://www.kaggle.com")
 
-    try:
-        # Configura o Chrome
-        chrome_options = Options()
-        if modo == "Headless (oculto)":
-            chrome_options.add_argument("--headless")
-            chrome_options.add_argument("--disable-gpu")
-            chrome_options.add_argument("--no-sandbox")
+except Exception as e:
+    st.error(f"Erro ao iniciar Selenium: {e}")
+
+finally:
+    st.set_page_config(page_title="Automação Kaggle", layout="centered")
+
 
         # Inicializa o navegador
         service = Service()
