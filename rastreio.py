@@ -1,10 +1,19 @@
 import streamlit as st
 import pandas as pd
 import requests
+import time
 
-# Configuração da página
-st.set_page_config(page_title="📦 Visualizador de Encomendas", layout="wide")
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
 
+# Configuração da página (apenas uma vez e no início)
+st.set_page_config(page_title="📦 Visualizador de Encomendas + Automação Kaggle", layout="wide")
+
+# ----------------------------
+# 📦 VISUALIZADOR DE ENCOMENDAS
+# ----------------------------
 st.title("📦 Visualizador de Encomendas")
 st.markdown("Gerencie e filtre sua lista de encomendas com busca inteligente por **CEP** ou **Cidade**.")
 
@@ -41,7 +50,7 @@ if uploaded_file:
             with st.expander("🔎 Buscar por CEP ou Cidade", expanded=True):
                 termo_busca = st.text_input("Digite um **CEP (8 dígitos)** ou uma **cidade**:")
                 
-                # Se o termo for um CEP (somente números e 8 dígitos)
+                # Se o termo for um CEP válido
                 if termo_busca.strip().isdigit() and len(termo_busca.strip()) == 8:
                     cep_info = buscar_cep(termo_busca.strip())
                     if cep_info:
@@ -65,27 +74,27 @@ if uploaded_file:
             st.markdown("### 📝 Tabela de Encomendas")
             st.data_editor(df_filtrado, use_container_width=True, num_rows="dynamic")
 
+    except Exception as e:
+        st.error(f"❌ Erro ao processar o arquivo: {e}")
+else:
+    st.info("⬆️ Envie um arquivo Excel com a coluna **'CEP'** e opcionalmente **'Cidade'**.")
 
-
-# Configuração da página
-st.set_page_config(page_title="Automação Kaggle", layout="centered")
+# ----------------------------
+# 🤖 AUTOMAÇÃO KAGGLE
+# ----------------------------
 st.title("🤖 Automação Selenium no Kaggle")
 
-# Escolha do modo
 modo = st.radio("Escolha o modo de execução do Selenium:", ["Normal (visível)", "Headless (oculto)"])
 
 if st.button("Executar Automação"):
     st.write("🔍 Iniciando automação no Kaggle...")
-try:
-    driver = webdriver.Chrome(service=service, options=chrome_options)
-    driver.get("https://www.kaggle.com")
 
-except Exception as e:
-    st.error(f"Erro ao iniciar Selenium: {e}")
-
-finally:
-    st.set_page_config(page_title="Automação Kaggle", layout="centered")
-
+    try:
+        chrome_options = Options()
+        if modo == "Headless (oculto)":
+            chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
 
         # Inicializa o navegador
         service = Service()
@@ -102,14 +111,7 @@ finally:
 
         st.success(f"✅ Deu tudo certo! O título da competição é: **{feito}**")
 
-        # Fecha o navegador
         driver.quit()
 
     except Exception as e:
         st.error(f"❌ Ocorreu um erro: {e}")
-
-
-    except Exception as e:
-        st.error(f"❌ Erro ao processar o arquivo: {e}")
-else:
-    st.info("⬆️ Envie um arquivo Excel com a coluna **'CEP'** e opcionalmente **'Cidade'**.")
