@@ -2,119 +2,124 @@ import streamlit as st
 import pandas as pd
 import requests
 from geopy.distance import geodesic
+from geopy.geocoders import Nominatim
+from io import BytesIO
 import folium
 from streamlit_folium import st_folium
 
-# --- Configurações ---
-st.set_page_config(page_title="Consulta de CEPs", layout="wide")
-st.title("📦 Consulta de Endereços e Distância por CEP")
-
-# --- Função para consultar a API ViaCEP ---
+# Função para consultar ViaCEP
 def consultar_cep(cep):
-    url = f"https://viacep.com.br/ws/{cep}/json/"
-    response = requests.get(url)
-    if response.status_code == 200 and 'erro' not in response.text:
-        return response.json()
-    else:
-        return None
-
-# --- Função para estimar coordenadas via Nominatim (OpenStreetMap) ---
-def get_coords_por_cidade_uf(cidade, uf):
     try:
-        url_coords = f"https://nominatim.openstreetmap.org/search?city={cidade}&state={uf}&country=Brasil&format=json"
-        response = requests.get(url_coords, headers={'User-Agent': 'Mozilla/5.0'}).json()
-        if response:
-            lat = float(response[0]['lat'])
-            lon = float(response[0]['lon'])
-            return (lat, lon)
+        r = requests.get(f"https://viacep.com.br/ws/{cep}/json/")
+        dados = r.json()
+        if "erro" in dados:
+            return {"cep": cep, "erro": "CEP não encontrado"}
+        return dados
     except:
-        return None
+        return {"cep": cep, "erro": "Erro na API"}
 
-# --- Inicializa variáveis de estado ---
-if "consultado" not in st.session_state:
-    st.session_state.consultado = False
-if "cep_remetente" not in st.session_state:
-    st.session_state.cep_remetente = ""
-if "cep_destinatario" not in st.session_state:
-    st.session_state.cep_destinatario = ""
+# Obter coordenadas geográficas de um CEP
+def coordenadas_por_cep(cep):
+    localizador = Nominatim(user_agent="consulta_cep_app")
+    try:
+        local = localizador.geocode(cep + ", Brasil")
+        if local:
+            return (local.latitude, local.longitude)
+    except:
+        pass
+    return None
 
-# --- Entradas ---
-col1, col2 = st.columns(2)
-with col1:
-    cep_remetente = st.text_input("CEP do Remetente:", placeholder="Ex: 01001-000", value=st.session_state.cep_remetente)
-with col2:
-    cep_destinatario = st.text_input("CEP do Destinatário:", placeholder="Ex: 01310-200", value=st.session_state.cep_destinatario)
+# Verificar se o local parece rural (simplesmente por heurística)
+def verificar_area_entrega(dados_cep):
+    if "localidade" in dados_cep and "logradouro" in dados_cep:
+        log = dados_cep["logradouro"].lower()
+        if "sítio" in log or "chácara" in log or "fazenda" in log or "zona rural" in log:
+            return "❌ Área Rural - Pode não receber entregas"
+    return "✅ Área urbana"
 
-# --- Botão para consultar ---
+# Converter para Excel
+def to_excel(df):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df.to_excel(writer, index=False, sheet_name='CEPs')
+    return output.getvalue()
+
+# Configuração da página
+st.set_page_config(page_title="🚚 Cálculo de Entrega por CEP", layout="wide")
+st.title("🚚 Consulta de Entrega por CEP")
+
+# Inicializar session_state
+if "consulta_feita" not in st.session_state:
+    st.session_state.consulta_feita = False
+    st.session_state.df = None
+    st.session_state.coord_rem = None
+    st.session_state.coord_dest = None
+
+# Entradas
+remetente = st.text_input("CEP do Remetente", placeholder="Ex: 01001-000")
+destinatario = st.text_input("CEP do Destinatário", placeholder="Ex: 87083-320")
+
+# Botão de consulta
 if st.button("Consultar"):
-    if cep_remetente and cep_destinatario:
-        st.session_state.consultado = True
-        st.session_state.cep_remetente = cep_remetente
-        st.session_state.cep_destinatario = cep_destinatario
+    if not remetente or not destinatario:
+        st.warning("Informe os dois CEPs.")
     else:
-        st.warning("Informe ambos os CEPs.")
-        st.session_state.consultado = False
+        dados_rem = consultar_cep(remetente)
+        dados_dest = consultar_cep(destinatario)
 
-# --- Mostrar resultados se consultado ---
-if st.session_state.consultado:
-    cep_remetente = st.session_state.cep_remetente
-    cep_destinatario = st.session_state.cep_destinatario
-
-    end_rem = consultar_cep(cep_remetente)
-    end_dest = consultar_cep(cep_destinatario)
-
-    if end_rem and end_dest:
-        st.subheader("🔎 Detalhes dos Endereços")
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.markdown("**Remetente**")
-            for k, v in end_rem.items():
-                st.write(f"{k.capitalize()}: {v}")
-
-        with col2:
-            st.markdown("**Destinatário**")
-            for k, v in end_dest.items():
-                st.write(f"{k.capitalize()}: {v}")
-
-        # Verifica se é área urbana
-        tipo_destino = "Urbana (Aceita entrega)" if end_dest.get("bairro") else "Rural (Pode não aceitar entrega)"
-        st.warning(f"📍 Área do destinatário: **{tipo_destino}**")
-
-        # Obter coordenadas aproximadas
-        coords_rem = get_coords_por_cidade_uf(end_rem['localidade'], end_rem['uf'])
-        coords_dest = get_coords_por_cidade_uf(end_dest['localidade'], end_dest['uf'])
-
-        if coords_rem and coords_dest:
-            dist_km = round(geodesic(coords_rem, coords_dest).km, 2)
-            st.success(f"📏 Distância aproximada entre os dois CEPs: **{dist_km} km**")
-
-            # --- Mapa com trajeto usando folium ---
-            map_center = [(coords_rem[0] + coords_dest[0]) / 2, (coords_rem[1] + coords_dest[1]) / 2]
-            m = folium.Map(location=map_center, zoom_start=7)
-
-            folium.Marker(location=coords_rem, popup="Remetente", icon=folium.Icon(color='blue')).add_to(m)
-            folium.Marker(location=coords_dest, popup="Destinatário", icon=folium.Icon(color='red')).add_to(m)
-
-            folium.PolyLine(locations=[coords_rem, coords_dest], color="green", weight=5, opacity=0.7).add_to(m)
-
-            st_folium(m, width=700, height=500)
-
-            # --- Exportar CSV ---
-            dados = {
-                "CEP Remetente": [cep_remetente],
-                "Endereço Remetente": [f"{end_rem.get('logradouro', '')}, {end_rem.get('bairro', '')}, {end_rem.get('localidade', '')}-{end_rem.get('uf', '')}"],
-                "CEP Destinatário": [cep_destinatario],
-                "Endereço Destinatário": [f"{end_dest.get('logradouro', '')}, {end_dest.get('bairro', '')}, {end_dest.get('localidade', '')}-{end_dest.get('uf', '')}"],
-                "Área Entrega": [tipo_destino],
-                "Distância (km)": [dist_km]
-            }
-            df_resultado = pd.DataFrame(dados)
-
-            csv = df_resultado.to_csv(index=False).encode('utf-8')
-            st.download_button("📥 Baixar CSV", csv, "dados_ceps.csv", "text/csv")
-
+        if "erro" in dados_rem or "erro" in dados_dest:
+            st.error("Um dos CEPs é inválido.")
         else:
-            st.error("Não foi possível calcular a distância entre os CEPs.")
-    else:
-        st.error("Um dos CEPs é inválido ou não encontrado.") adicione o grafico que eu coloquei acima quando eu mostrar as informacoes que eu digitar 
+            coord_rem = coordenadas_por_cep(remetente)
+            coord_dest = coordenadas_por_cep(destinatario)
+
+            if not coord_rem or not coord_dest:
+                st.error("Não foi possível localizar coordenadas para um dos CEPs.")
+            else:
+                km = round(geodesic(coord_rem, coord_dest).km, 2)
+                entrega = verificar_area_entrega(dados_dest)
+
+                resultado = {
+                    "CEP Remetente": remetente,
+                    "Logradouro Remetente": dados_rem.get("logradouro", ""),
+                    "Cidade Remetente": dados_rem.get("localidade", ""),
+                    "UF Remetente": dados_rem.get("uf", ""),
+                    "CEP Destinatário": destinatario,
+                    "Logradouro Destinatário": dados_dest.get("logradouro", ""),
+                    "Cidade Destinatário": dados_dest.get("localidade", ""),
+                    "UF Destinatário": dados_dest.get("uf", ""),
+                    "Distância (KM)": km,
+                    "Entrega Possível?": entrega
+                }
+
+                st.session_state.df = pd.DataFrame([resultado])
+                st.session_state.coord_rem = coord_rem
+                st.session_state.coord_dest = coord_dest
+                st.session_state.consulta_feita = True
+
+# Exibir resultados se consulta foi feita
+if st.session_state.consulta_feita:
+    st.success("✅ Consulta finalizada")
+    st.dataframe(st.session_state.df)
+
+    # Botões de download
+    st.download_button(
+        "📥 Baixar CSV",
+        data=st.session_state.df.to_csv(index=False).encode("utf-8"),
+        file_name="consulta_ceps.csv",
+        mime="text/csv"
+    )
+    st.download_button(
+        "📥 Baixar Excel",
+        data=to_excel(st.session_state.df),
+        file_name="consulta_ceps.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+    # Exibir mapa
+    st.subheader("🗺️ Mapa da rota entre os CEPs")
+    m = folium.Map(location=st.session_state.coord_rem, zoom_start=6)
+    folium.Marker(st.session_state.coord_rem, tooltip="Remetente", icon=folium.Icon(color="green")).add_to(m)
+    folium.Marker(st.session_state.coord_dest, tooltip="Destinatário", icon=folium.Icon(color="blue")).add_to(m)
+    folium.PolyLine([st.session_state.coord_rem, st.session_state.coord_dest], color="red", weight=2.5).add_to(m)
+    st_folium(m, width=800, height=500)
