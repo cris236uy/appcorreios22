@@ -117,3 +117,4 @@ else:
     else:
         st.info("Por favor, faça o upload de um arquivo Excel para começar.")
                 
+
