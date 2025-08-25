@@ -4,7 +4,6 @@ import requests
 from geopy.distance import geodesic
 import folium
 from streamlit_folium import st_folium
-import plotly.graph_objects as go
 
 # --- Configurações ---
 st.set_page_config(page_title="Consulta de CEPs", layout="wide")
@@ -12,7 +11,6 @@ st.title("📦 Consulta de Endereços e Distância por CEP")
 
 # --- Função para consultar a API ViaCEP ---
 def consultar_cep(cep):
-    cep = str(cep).replace("-", "").strip()  # Garante que seja string sem hífen
     url = f"https://viacep.com.br/ws/{cep}/json/"
     response = requests.get(url)
     if response.status_code == 200 and 'erro' not in response.text:
@@ -43,17 +41,9 @@ if "cep_destinatario" not in st.session_state:
 # --- Entradas ---
 col1, col2 = st.columns(2)
 with col1:
-    cep_remetente = st.text_input(
-        "CEP do Remetente:", 
-        placeholder="Ex: 01001-000", 
-        value=st.session_state.cep_remetente
-    )
+    cep_remetente = st.text_input("CEP do Remetente:", placeholder="Ex: 01001-000", value=st.session_state.cep_remetente)
 with col2:
-    cep_destinatario = st.text_input(
-        "CEP do Destinatário:", 
-        placeholder="Ex: 01310-200", 
-        value=st.session_state.cep_destinatario
-    )
+    cep_destinatario = st.text_input("CEP do Destinatário:", placeholder="Ex: 01310-200", value=st.session_state.cep_destinatario)
 
 # --- Botão para consultar ---
 if st.button("Consultar"):
@@ -67,8 +57,8 @@ if st.button("Consultar"):
 
 # --- Mostrar resultados se consultado ---
 if st.session_state.consultado:
-    cep_remetente = str(st.session_state.cep_remetente).replace("-", "").strip()
-    cep_destinatario = str(st.session_state.cep_destinatario).replace("-", "").strip()
+    cep_remetente = st.session_state.cep_remetente
+    cep_destinatario = st.session_state.cep_destinatario
 
     end_rem = consultar_cep(cep_remetente)
     end_dest = consultar_cep(cep_destinatario)
@@ -99,37 +89,16 @@ if st.session_state.consultado:
             dist_km = round(geodesic(coords_rem, coords_dest).km, 2)
             st.success(f"📏 Distância aproximada entre os dois CEPs: **{dist_km} km**")
 
-            # --- Mapa Folium ---
+            # --- Mapa com trajeto usando folium ---
             map_center = [(coords_rem[0] + coords_dest[0]) / 2, (coords_rem[1] + coords_dest[1]) / 2]
             m = folium.Map(location=map_center, zoom_start=7)
+
             folium.Marker(location=coords_rem, popup="Remetente", icon=folium.Icon(color='blue')).add_to(m)
             folium.Marker(location=coords_dest, popup="Destinatário", icon=folium.Icon(color='red')).add_to(m)
+
             folium.PolyLine(locations=[coords_rem, coords_dest], color="green", weight=5, opacity=0.7).add_to(m)
+
             st_folium(m, width=700, height=500)
-
-            # --- Gráfico Plotly ---
-            lats = [coords_rem[0], coords_dest[0], coords_dest[0]-0.2, coords_rem[0]-0.2]
-            lons = [coords_rem[1], coords_dest[1], coords_dest[1]+0.2, coords_rem[1]+0.2]
-
-            fig = go.Figure(go.Scattermapbox(
-                fill="toself",
-                lon=lons,
-                lat=lats,
-                marker={'size': 10, 'color': "orange"}
-            ))
-
-            fig.update_layout(
-                mapbox={
-                    'style': "open-street-map",
-                    'center': {'lon': (coords_rem[1]+coords_dest[1])/2, 'lat': (coords_rem[0]+coords_dest[0])/2},
-                    'zoom': 6
-                },
-                showlegend=False,
-                margin={'l':0,'r':0,'t':0,'b':0}
-            )
-
-            st.subheader("📍 Mapa Interativo com Plotly")
-            st.plotly_chart(fig, use_container_width=True)
 
             # --- Exportar CSV ---
             dados = {
@@ -148,5 +117,4 @@ if st.session_state.consultado:
         else:
             st.error("Não foi possível calcular a distância entre os CEPs.")
     else:
-        st.error("Um dos CEPs é inválido ou não encontrado.")
-
+        st.error("Um dos CEPs é inválido ou não encontrado.") adicione o grafico que eu coloquei acima quando eu mostrar as informacoes que eu digitar 
