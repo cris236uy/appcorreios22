@@ -6,8 +6,17 @@ from geopy.geocoders import Nominatim
 from io import BytesIO
 import folium
 from streamlit_folium import st_folium
+import re
 
-# Função para consultar ViaCEP
+# -----------------------------
+# Funções auxiliares
+# -----------------------------
+
+# Valida CEP (formato 00000-000 ou 00000000)
+def cep_valido(cep):
+    return re.fullmatch(r"\d{5}-?\d{3}", cep) is not None
+
+# Consulta CEP na API ViaCEP
 def consultar_cep(cep):
     try:
         r = requests.get(f"https://viacep.com.br/ws/{cep}/json/")
@@ -18,7 +27,8 @@ def consultar_cep(cep):
     except:
         return {"cep": cep, "erro": "Erro na API"}
 
-# Obter coordenadas geográficas de um CEP
+# Obter coordenadas geográficas de um CEP (com cache para performance)
+@st.cache_data
 def coordenadas_por_cep(cep):
     localizador = Nominatim(user_agent="consulta_cep_app")
     try:
@@ -29,7 +39,7 @@ def coordenadas_por_cep(cep):
         pass
     return None
 
-# Verificar se o local parece rural (simplesmente por heurística)
+# Verificar se o endereço parece rural
 def verificar_area_entrega(dados_cep):
     if "localidade" in dados_cep and "logradouro" in dados_cep:
         log = dados_cep["logradouro"].lower()
@@ -37,14 +47,16 @@ def verificar_area_entrega(dados_cep):
             return "❌ Área Rural - Pode não receber entregas"
     return "✅ Área urbana"
 
-# Converter para Excel
+# Converter DataFrame para Excel
 def to_excel(df):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df.to_excel(writer, index=False, sheet_name='CEPs')
     return output.getvalue()
 
+# -----------------------------
 # Configuração da página
+# -----------------------------
 st.set_page_config(page_title="🚚 Cálculo de Entrega por CEP", layout="wide")
 st.title("🚚 Consulta de Entrega por CEP")
 
@@ -55,23 +67,33 @@ if "consulta_feita" not in st.session_state:
     st.session_state.coord_rem = None
     st.session_state.coord_dest = None
 
+# -----------------------------
 # Entradas
+# -----------------------------
 remetente = st.text_input("CEP do Remetente", placeholder="Ex: 01001-000")
 destinatario = st.text_input("CEP do Destinatário", placeholder="Ex: 87083-320")
 
+# Limpar hífen
+remetente_clean = remetente.replace("-", "") if remetente else ""
+destinatario_clean = destinatario.replace("-", "") if destinatario else ""
+
+# -----------------------------
 # Botão de consulta
+# -----------------------------
 if st.button("Consultar"):
     if not remetente or not destinatario:
         st.warning("Informe os dois CEPs.")
+    elif not cep_valido(remetente) or not cep_valido(destinatario):
+        st.error("Um dos CEPs está em formato inválido.")
     else:
-        dados_rem = consultar_cep(remetente)
-        dados_dest = consultar_cep(destinatario)
+        dados_rem = consultar_cep(remetente_clean)
+        dados_dest = consultar_cep(destinatario_clean)
 
         if "erro" in dados_rem or "erro" in dados_dest:
-            st.error("Um dos CEPs é inválido.")
+            st.error("Um dos CEPs não foi encontrado.")
         else:
-            coord_rem = coordenadas_por_cep(remetente)
-            coord_dest = coordenadas_por_cep(destinatario)
+            coord_rem = coordenadas_por_cep(remetente_clean)
+            coord_dest = coordenadas_por_cep(destinatario_clean)
 
             if not coord_rem or not coord_dest:
                 st.error("Não foi possível localizar coordenadas para um dos CEPs.")
@@ -97,7 +119,9 @@ if st.button("Consultar"):
                 st.session_state.coord_dest = coord_dest
                 st.session_state.consulta_feita = True
 
-# Exibir resultados se consulta foi feita
+# -----------------------------
+# Exibir resultados
+# -----------------------------
 if st.session_state.consulta_feita:
     st.success("✅ Consulta finalizada")
     st.dataframe(st.session_state.df)
@@ -118,7 +142,9 @@ if st.session_state.consulta_feita:
 
     # Exibir mapa
     st.subheader("🗺️ Mapa da rota entre os CEPs")
-    m = folium.Map(location=st.session_state.coord_rem, zoom_start=6)
+    lat_c = (st.session_state.coord_rem[0] + st.session_state.coord_dest[0]) / 2
+    lon_c = (st.session_state.coord_rem[1] + st.session_state.coord_dest[1]) / 2
+    m = folium.Map(location=(lat_c, lon_c), zoom_start=6)
     folium.Marker(st.session_state.coord_rem, tooltip="Remetente", icon=folium.Icon(color="green")).add_to(m)
     folium.Marker(st.session_state.coord_dest, tooltip="Destinatário", icon=folium.Icon(color="blue")).add_to(m)
     folium.PolyLine([st.session_state.coord_rem, st.session_state.coord_dest], color="red", weight=2.5).add_to(m)
