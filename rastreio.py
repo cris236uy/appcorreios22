@@ -1,80 +1,109 @@
 import streamlit as st
 import pandas as pd
-import requests
-import time
-
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+import time
+from io import BytesIO
 
-# Configuração da página (apenas uma vez e no início)
-st.set_page_config(page_title="📦 Visualizador de Encomendas + Automação Kaggle", layout="wide")
+# --- Configuração da página
+st.set_page_config(page_title="Rastreador de Encomendas", layout="wide")
+st.title("🔍 Rastreador de Encomendas (Muambator)")
 
-# ----------------------------
-# 📦 VISUALIZADOR DE ENCOMENDAS
-# ----------------------------
-st.title("📦 Visualizador de Encomendas")
-st.markdown("Gerencie e filtre sua lista de encomendas com busca inteligente por **CEP** ou **Cidade**.")
+# --- Função para rastrear código via Selenium
+def rastrear_objeto(codigo):
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920x1080")
 
-# Função para consultar o ViaCEP
-def buscar_cep(cep):
+    driver = webdriver.Chrome(options=chrome_options)
+    status = "Não encontrado"
+
     try:
-        response = requests.get(f"https://viacep.com.br/ws/{cep}/json/")
-        if response.status_code == 200:
-            data = response.json()
-            if "erro" in data:
-                return None
-            return data
-    except:
-        return None
+        driver.get("https://www.muambator.com.br/")
+        time.sleep(3)
 
-# Upload do arquivo
-uploaded_file = st.file_uploader("📁 Faça upload do arquivo Excel (.xlsx)", type=["xlsx"])
+        campo = driver.find_element(By.ID, "pesquisaPub")
+        campo.clear()
+        campo.send_keys(codigo)
+        time.sleep(1)
 
-if uploaded_file:
-    try:
-        df = pd.read_excel(uploaded_file)
-        df.columns = df.columns.str.strip()  # Remove espaços nos nomes das colunas
+        botao = driver.find_element(By.ID, "submitPesqPub")
+        driver.execute_script("arguments[0].click();", botao)
+        time.sleep(4)
 
-        # Garantir que colunas importantes existem
-        if "CEP" not in df.columns:
-            st.error("❌ A coluna 'CEP' não foi encontrada no arquivo.")
-        else:
-            df["CEP"] = df["CEP"].astype(str)
-
-            if "Cidade" not in df.columns:
-                df["Cidade"] = ""
-
-            # Campo de busca com API
-            with st.expander("🔎 Buscar por CEP ou Cidade", expanded=True):
-                termo_busca = st.text_input("Digite um **CEP (8 dígitos)** ou uma **cidade**:")
-                
-                # Se o termo for um CEP válido
-                if termo_busca.strip().isdigit() and len(termo_busca.strip()) == 8:
-                    cep_info = buscar_cep(termo_busca.strip())
-                    if cep_info:
-                        st.success("📍 Informações do CEP encontradas:")
-                        st.json(cep_info)
-                    else:
-                        st.warning("⚠️ CEP não encontrado na base do ViaCEP.")
-
-            # Aplicar filtro no DataFrame
-            if termo_busca:
-                termo_busca_lower = termo_busca.lower()
-                df_filtrado = df[
-                    df["CEP"].str.contains(termo_busca_lower, case=False, na=False) |
-                    df["Cidade"].astype(str).str.lower().str.contains(termo_busca_lower, na=False)
-                ]
-                st.markdown(f"### 🔍 Resultados encontrados: {len(df_filtrado)}")
-            else:
-                df_filtrado = df
-
-            # Editor de dados
-            st.markdown("### 📝 Tabela de Encomendas")
-            st.data_editor(df_filtrado, use_container_width=True, num_rows="dynamic")
+        status = driver.find_element(By.CLASS_NAME, "situacao-header").text
 
     except Exception as e:
-        st.error(f"❌ Erro ao processar o arquivo: {e}")
+        status = f"Erro: {e}"
+
+    finally:
+        driver.quit()
+
+    return status
+
+
+# --- Upload da base de dados
+uploaded_file = st.file_uploader("Faça upload da base de dados (.xlsx)", type=["xlsx"])
+df = None
+if uploaded_file:
+    df = pd.read_excel(uploaded_file)
+
+# --- Entrada de códigos pelo usuário
+lista_codigos = st.text_area("Cole os códigos de rastreio (um por linha):")  
+
+# --- Filtro de CEP (só aparece se houver planilha carregada)
+if df is not None:
+    cepfilter = df["CEP"].value_counts().index()
+    cepfilter2 = st.sidebar.selectbox("Filtro por CEP", cepfilter)
+    filtrada = df[df["CEP"] == cepfilter2] 
 else:
-    st.info("⬆️ Envie um arquivo Excel com a coluna **'CEP'** e opcionalmente **'Cidade'**.")
+    filtrada = pd.DataFrame(columns=["CEP", "DATA", "CENTRO DE CUSTO", "CÓDIGO DE RASTREIO"])
+
+# --- Abas com páginas
+tab1, tab2, tab3 = st.tabs(["📦 Cruz Alta", "🏢 Vertente", "📨 Tanabi"])
+
+with tab1:
+    st.header("Unidade Cruz Alta")
+    st.data_editor(filtrada[["CEP", "DATA", "CENTRO DE CUSTO", "CÓDIGO DE RASTREIO"]], num_rows="dynamic")
+
+with tab2:
+    st.header("Unidade Vertente")
+    st.image("https://static.streamlit.io/examples/dog.jpg", width=200)
+
+with tab3:
+    st.header("Unidade Tanabi")
+    st.image("https://static.streamlit.io/examples/owl.jpg", width=200)
+
+# --- Botão para rastrear
+if st.button("🚚 Rastrear Códigos"):
+    codigos = [c.strip() for c in lista_codigos.strip().split("\n") if c.strip()]
+    
+    if not codigos:
+        st.warning("⚠️ Nenhum código informado.")
+    else:
+        resultados = []
+        with st.spinner(f"Rastreando {len(codigos)} objetos..."):
+            for i, cod in enumerate(codigos):
+                status = rastrear_objeto(cod)
+                resultados.append({"Código": cod, "Status": status})
+                st.write(f"{i+1}/{len(codigos)} ➜ {cod}: {status}")
+
+        # Resultado final
+        df_resultados = pd.DataFrame(resultados)
+        st.success("✅ Rastreamento finalizado!")
+        st.dataframe(df_resultados)
+
+        # Botão para baixar CSV
+        csv = df_resultados.to_csv(index=False).encode("utf-8")
+        st.download_button("📥 Baixar resultado (CSV)", data=csv, file_name="rastreio.csv", mime="text/csv")
+
+        # Botão para baixar Excel
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df_resultados.to_excel(writer, index=False, sheet_name='Rastreamento')
+        output.seek(0)
+        st.download_button("📥 Baixar resultado (Excel)", data=output, file_name="rastreio.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
