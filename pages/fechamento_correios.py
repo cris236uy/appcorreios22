@@ -12,6 +12,9 @@ st.set_page_config(
     page_title="Fechamento Universal"
 )
 
+# 🏦 Título principal
+st.title("💼 Fechamento Universal")
+
 # 📂 Upload de arquivo
 uploaded_file = st.file_uploader("Faça upload da base de dados (.xlsx)", type=["xlsx"])
 
@@ -57,14 +60,14 @@ if uploaded_file:
             soma_por_centro = filtro.groupby("CENTRO DE CUSTO")["VALOR"].sum().reset_index()
 
             # ✅ Exibe os dados filtrados
-            st.subheader("Dados Filtrados")
+            st.subheader("📑 Dados Filtrados")
             st.dataframe(filtro)
 
             # 💬 Exibe o total geral
             st.success(f"Total do VALOR no intervalo selecionado: R$ {total_valor:,.2f}")
 
             # 📋 Exibe o total por centro de custo
-            st.subheader("Total por Centro de Custo")
+            st.subheader("🏷️ Total por Centro de Custo")
             st.dataframe(soma_por_centro)
 
             # 📤 Exportar para Excel
