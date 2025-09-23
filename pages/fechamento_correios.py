@@ -9,40 +9,9 @@ from io import BytesIO
 # Configuração da página
 st.set_page_config(
     layout="wide",
-    page_title="Fechamentos Correios"
+    page_title="Fechamento Universal"
 )
 
-# Usuários e senhas válidos
-usuarios_validos = {
-    "admin": "1234",
-    "user1": "abcd",
-    "user2": "senha2"
-}
-
-# Função de login
-def tela_login():
-    st.title("Login")
-    usuario = st.text_input("Usuário")
-    senha = st.text_input("Senha", type="password")
-    if st.button("Entrar"):
-        if usuario in usuarios_validos and senha == usuarios_validos[usuario]:
-            st.session_state["logado"] = True
-            st.session_state["usuario"] = usuario
-            st.rerun()  # Força recarregamento
-        else:
-            st.error("Usuário ou senha incorretos")
-
-# Inicializa o estado da sessão
-if "logado" not in st.session_state:
-    st.session_state["logado"] = False
-
-# Exibe a tela de login se o usuário não estiver logado
-if not st.session_state["logado"]:
-    tela_login()
-else:
-    # 🔐 Conteúdo protegido
-    st.title(f"Página Protegida - Bem-vindo {st.session_state['usuario']}!")
-    st.write("Você está logado! Conteúdo secreto aqui.")
 
     # 📂 Upload de arquivo
     uploaded_file = st.file_uploader("Faça upload da base de dados (.xlsx)", type=["xlsx"])
